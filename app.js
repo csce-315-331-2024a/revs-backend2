@@ -691,7 +691,7 @@ app.post('/api/orders', async (req, res) => {
 
 app.get('/api/orders', (req, res) => {
     const sql = `
-    (
+    SELECT id, time, name FROM (
         SELECT oh.orderID AS id, oh.time, f.foodname AS name
         FROM OrderHistory AS oh
         LEFT JOIN OrderDetails AS od ON oh.orderID = od.orderID
@@ -705,7 +705,8 @@ app.get('/api/orders', (req, res) => {
         LEFT JOIN LATERAL unnest(od.drinkID) AS drink_id ON true
         LEFT JOIN Drink AS d ON drink_id = d.drinkID
         WHERE oh.iscomplete = false -- Add condition for completed orders
-      )
+      ) AS subquery
+      ORDER BY time desc;
     `;
 
     pool.query(sql, (err, result) => {
