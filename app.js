@@ -190,6 +190,108 @@ app.put('/api/commonPairings', (req, res) => {
     }
 });
 
+app.put('/api/salesReport', (req, res) => {
+    const { startTime, endTime } = req.body;
+
+    // Check if both startTime and endTime are provided
+    if (!startTime || !endTime) {
+        return res.status(400).json({ error: 'Start time and end time are required' });
+    } else {
+        console.log('Start Time:', startTime);
+        console.log('End Time:', endTime);
+
+        const sql = `
+            SELECT item, SUM(price) AS total_sales
+            FROM (
+                SELECT f.foodname AS item, f.price
+                FROM orderdetails o
+                JOIN food f ON f.foodid = ANY(o.foodid)
+                JOIN orderhistory oh ON o.orderid = oh.orderid
+                WHERE oh.time >= $1 AND oh.time <= $2
+                UNION ALL
+                SELECT d.producttype AS item, d.price
+                FROM orderdetails o
+                JOIN drink d ON d.drinkid = ANY(o.drinkid)
+                JOIN orderhistory oh ON o.orderid = oh.orderid
+                WHERE oh.time >= $1 AND oh.time <= $2
+            ) AS expanded_items
+            GROUP BY item
+            ORDER BY total_sales DESC
+        `;
+
+        // console.log('SQL Query:', sql, 'Parameters:', [startTime, endTime]);
+
+        // Use parameterized query to prevent SQL injection
+        pool.query(sql, [startTime, endTime, startTime, endTime], (err, result) => {
+            if (err) {
+                console.error('Error executing sales report query:', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            res.json(result.rows);
+        });
+    }
+});
+
+app.put('/api/excessReport', (req, res) => {
+    const { startTime } = req.body;
+
+    // Check if startTime is provided
+    if (!startTime) {
+        return res.status(400).json({ error: 'Start time is required' });
+    } else {
+        console.log('Start Time:', startTime);
+
+        const sql = `
+        WITH ConsumedIngredients AS (
+            SELECT UNNEST(F.ingredients) AS ingredient, COUNT(*) as usageCount
+            FROM OrderDetails OD
+            JOIN Food F ON F.foodid = ANY(OD.foodid)
+            JOIN OrderHistory OH ON OH.orderid = OD.orderid
+            WHERE OH.time BETWEEN '${startTime}' AND CURRENT_TIMESTAMP
+            GROUP BY ingredient
+        ), TotalInventory AS (
+            SELECT ingredient, 1000 as totalStock
+            FROM ConsumedIngredients
+        )
+        SELECT CI.ingredient, CI.usageCount, TI.totalStock
+        FROM ConsumedIngredients CI
+        JOIN TotalInventory TI ON CI.ingredient = TI.ingredient
+        WHERE CI.usageCount < (TI.totalStock * 0.1);        
+        `;
+
+        console.log('SQL Query for Excess Report:', sql);
+
+        // Assuming you have a configured pool from pg or similar database connection pool
+        pool.query(sql, (err, result) => {
+            if (err) {
+                console.error('Error executing query:', err);
+                return res.status(500).json({ error: 'Internal Server Error' });
+            }
+            res.json(result.rows);
+        });
+    }
+});
+
+app.put('/api/restockReport', (req, res) => {
+    const sql = `
+        SELECT Ingredient, Max_Capacity, Current_Capacity, 
+        CASE WHEN Current_Capacity < (0.20 * Max_Capacity) THEN 'Restock' ELSE 'Sufficient' END AS Status 
+        FROM inventory 
+        WHERE Current_Capacity < (0.20 * Max_Capacity) 
+        ORDER BY Ingredient ASC;
+    `;
+
+    console.log('SQL Query for Restock Report:', sql);
+
+    pool.query(sql, (err, result) => {
+        if (err) {
+            console.error('Error executing restock report query:', err);
+            return res.status(500).json({ error: 'Internal Server Error' });
+        }
+        res.json(result.rows);
+    });
+});
+
 // select and display food items
 app.get('/api/foodItems', (req, res) => {
     const { category, endTime } = req.query;
@@ -469,7 +571,6 @@ app.put('/api/food/ingredients', (req, res) => {
         res.json({ message: 'Ingredients updated successfully' });
     });
 });
-
 
 // update products
 app.put('/api/products', (req, res) => {
