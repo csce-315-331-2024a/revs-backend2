@@ -723,6 +723,11 @@ app.get('/api/orders', (req, res) => {
                 break;
             }
 
+            // Skip processing if row.name is empty
+            if (!row.name) {
+                continue;
+            }
+
             if (!currentOrder || currentOrder.id !== row.id) {
                 if (currentOrder) {
                     orders.push(currentOrder);
@@ -738,6 +743,8 @@ app.get('/api/orders', (req, res) => {
                 currentOrder.products.push({ name: row.name, quantity: 1 }); // Default quantity is set to 1
             }
         }
+
+        // Push the last order if it exists and hasn't been pushed yet
         if (currentOrder) {
             orders.push(currentOrder);
             processedOrders++; // Increment processed orders
