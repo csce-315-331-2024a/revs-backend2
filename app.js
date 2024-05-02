@@ -207,13 +207,13 @@ app.put('/api/salesReport', (req, res) => {
                 FROM orderdetails o
                 JOIN food f ON f.foodid = ANY(o.foodid)
                 JOIN orderhistory oh ON o.orderid = oh.orderid
-                WHERE oh.time >= $1 AND oh.time <= $2
+                WHERE oh.time >= ${startTime} AND oh.time <= ${endTime}
                 UNION ALL
                 SELECT d.producttype AS item, d.price
                 FROM orderdetails o
                 JOIN drink d ON d.drinkid = ANY(o.drinkid)
                 JOIN orderhistory oh ON o.orderid = oh.orderid
-                WHERE oh.time >= $1 AND oh.time <= $2
+                WHERE oh.time >= ${startTime} AND oh.time <= ${endTime}
             ) AS expanded_items
             GROUP BY item
             ORDER BY total_sales DESC
@@ -222,7 +222,7 @@ app.put('/api/salesReport', (req, res) => {
         // console.log('SQL Query:', sql, 'Parameters:', [startTime, endTime]);
 
         // Use parameterized query to prevent SQL injection
-        pool.query(sql, [startTime, endTime, startTime, endTime], (err, result) => {
+        pool.query(sql, (err, result) => {
             if (err) {
                 console.error('Error executing sales report query:', err);
                 return res.status(500).json({ error: 'Internal Server Error' });
